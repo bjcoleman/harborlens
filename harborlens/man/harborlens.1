@@ -1,0 +1,540 @@
+.TH HARBORLENS 1 "Spiral Harbor" "Harbor Lens" "User Commands"
+.SH NAME
+harborlens \- measure software delivery and prepare records for Harbor Glass
+.SH SYNOPSIS
+.B harborlens assess
+.I target
+[\fB\-\-since\fR \fIDATE\fR]
+[\fB\-\-until\fR \fIDATE\fR]
+[\fB\-\-branch\fR \fINAME\fR]
+[\fB\-\-deploy\-from\fR \fISOURCE\fR]
+[\fB\-\-format\fR \fIFMT\fR]
+[\fB\-\-output\fR \fIFILE\fR]
+.PP
+.B harborlens export
+.I target
+[\fB\-\-output\fR \fIFILE\fR]
+[\fB\-\-push\-to\fR \fIURL\fR]
+[\fB\-\-dry\-run\fR]
+.PP
+.B harborlens watch
+[\fB\-\-bind\fR \fIADDR\fR]
+[\fB\-\-secret\fR \fIFILE\fR]
+.PP
+.B harborlens compare
+.I target
+[\fB\-\-cohort\fR \fINAME\fR]
+[\fB\-\-baseline\fR \fIFILE\fR]
+.SH DESCRIPTION
+Harbor Lens reads the delivery history of a software team.
+The free program prints all four DORA metrics.
+Deployment frequency and lead time for changes are computed.
+Time to restore service and change failure rate are printed and marked
+not measured in the free tool.
+Harbor Glass computes those two, plus incident linking, the model,
+the benchmarks, and the recommendations.
+The free report header states whether a GitHub token was found.
+A token read from a file is reported as
+.B found ./.env
+(or the relative path of that file).
+A token already set in the environment is reported as found there.
+The header does not print the token.
+This manual describes the full collector a subscriber runs.
+The free program shipped in this repository implements
+.B assess
+only, and it counts git tags as deployments.
+Options marked
+.B Harbor Glass
+are accepted by a subscriber build.
+The free build prints an error for those options.
+.PP
+A change is a commit carried on a push event.
+A deployment is a successful production release of one or more changes.
+An incident is a closed issue that names the change which caused it.
+The free build follows the view definitions in
+.I queries/changes.sql
+and
+.IR queries/deployments.sql .
+Incident rules are in
+.I queries/incidents.sql
+and are applied by Harbor Glass.
+Bucket names follow
+.IR METRICS.md .
+The free build scores the span of the history you asked for.
+The hosted dashboard scores the last three months from today.
+.PP
+.B assess
+reads a local git repository, or clones a GitHub repository.
+.B export
+writes the same events as training records.
+.B watch
+receives live webhooks.
+.B compare
+places a result next to a Harbor Glass cohort.
+.SH COMMANDS
+.TP
+.B assess \fItarget\fR
+Score a repository.
+.I target
+is a local path, a bare clone, or a GitHub URL of the form
+https://github.com/owner/repo.
+A URL is cloned with
+.BR "git clone \-\-bare" .
+A local path is read in place.
+.TP
+.B export \fItarget\fR
+Write events_raw records for
+.IR target .
+This is the file a Harbor Glass training job consumes.
+.B Harbor Glass
+when combined with
+.BR \-\-push\-to .
+.TP
+.B watch
+Listen for GitHub, GitLab, and Cloud Build webhooks and append them
+to the local event log.
+.B Harbor Glass.
+.TP
+.B compare \fItarget\fR
+Print the four metrics and the distance from a named cohort.
+.B Harbor Glass.
+.SH OPTIONS
+.SS General
+.TP
+.B \-h\fR, \fB\-\-help
+Show a short help message and exit.
+.TP
+.B \-\-version
+Print the Harbor Lens version and exit.
+.TP
+.B \-v\fR, \fB\-\-verbose
+Print clone progress, rate-limit headers, and the deploy signal that
+was chosen.
+.TP
+.B \-q\fR, \fB\-\-quiet
+Print only the four metric lines.
+.TP
+.B \-\-config \fIFILE\fR
+Read defaults from
+.IR FILE .
+The default path is
+.IR ~/.config/harborlens/config.toml .
+Command-line flags override the file.
+.TP
+.B \-\-format \fIFMT\fR
+Report format.
+.I FMT
+is
+.BR text ,
+.BR json ,
+or
+.BR markdown .
+The default is
+.BR text .
+.B markdown
+is
+.B Harbor Glass.
+.TP
+.B \-\-since \fIDATE\fR
+Ignore events before
+.IR DATE .
+Use YYYY-MM-DD.
+.TP
+.B \-\-until \fIDATE\fR
+Ignore events after
+.IR DATE .
+Use YYYY-MM-DD.
+.B Harbor Glass.
+The free build scores through the latest event.
+.TP
+.B \-\-offline
+Do not call the GitHub API.
+Git history and tags are still read.
+A URL that is not already cached fails.
+.SS assess
+.TP
+.B \-\-branch \fINAME\fR
+Score the first parent of
+.I NAME
+instead of
+.BR HEAD .
+.TP
+.B \-\-all\-branches
+Include commits reachable from any branch head.
+Deploy matching then uses topology instead of first-parent order.
+.B Harbor Glass.
+.TP
+.B \-\-deploy\-from \fISOURCE\fR
+Where a deployment comes from.
+.I SOURCE
+is a comma-separated list of
+.BR tags ,
+.BR releases ,
+.BR workflows ,
+and
+.BR deployments .
+The free build accepts only
+.BR tags .
+The subscriber default is
+.BR tags,releases,workflows,deployments ,
+and the first source that yields events wins.
+The report names the source it used.
+.TP
+.B \-\-workflow \fIGLOB\fR
+When
+.B \-\-deploy\-from
+includes
+.BR workflows ,
+a successful run on the default branch counts as a deployment if the
+workflow name matches
+.IR GLOB .
+Repeat the flag for more names.
+Example:
+.BR \-\-workflow "Redeploy*" .
+.B Harbor Glass.
+.TP
+.B \-\-environment \fINAME\fR
+Keep deployments whose environment is
+.IR NAME ,
+such as
+.B production
+or
+.BR preview .
+Unmatched deployments are counted in a separate line and omitted from
+the four metrics.
+.B Harbor Glass.
+.TP
+.B \-\-incident\-label \fINAME\fR
+Label that marks an incident.
+The free build always uses
+.BR Incident .
+A subscriber build may pass another name, or several by repeating
+the flag.
+.TP
+.B \-\-root\-cause \fIREGEX\fR
+Pattern that extracts the causing commit from an issue body.
+The free build uses
+.BR "root cause: <sha>" .
+The pattern must contain one capture group.
+.B Harbor Glass.
+.TP
+.B \-\-cache\-dir \fIDIR\fR
+Store bare clones and API pages under
+.IR DIR .
+The default is
+.IR .harborlens/
+inside the current directory.
+A second run reuses the cache.
+.TP
+.B \-\-no\-cache
+Clone and fetch again, and do not write the cache.
+.TP
+.B \-\-include\-prs
+Add pull-request timing to the report: time to first review, time to
+merge, and median diff size.
+.B Harbor Glass.
+.TP
+.B \-\-include\-actions
+Add CI success rate and median duration for the default branch.
+.B Harbor Glass.
+.TP
+.B \-\-include\-reviews
+Add reviewer load and the share of reviews done by the busiest person.
+.B Harbor Glass.
+.SS export
+.TP
+.B \-\-output \fIFILE\fR
+Write one JSON object per line.
+Fields match the Four Keys
+.B events_raw
+table:
+event_type, id, metadata, time_created, signature, msg_id, and source.
+.B assess
+accepts this flag as well.
+.TP
+.B \-\-push\-to \fIURL\fR
+POST each event to the Four Keys webhook at
+.IR URL ,
+using the same signed headers as
+.IR data\-generator/generate_data.py .
+Requires
+.B HARBOR_WEBHOOK_SECRET
+or
+.BR \-\-secret .
+.B Harbor Glass.
+.TP
+.B \-\-dry\-run
+With
+.BR \-\-push\-to ,
+print the requests and send nothing.
+.SS watch
+.TP
+.B \-\-bind \fIADDR\fR
+Address and port to listen on.
+The default is
+.BR 127.0.0.1:8080 .
+.B Harbor Glass.
+.TP
+.B \-\-secret \fIFILE\fR
+File containing the HMAC secret used to check
+.B X\-Hub\-Signature
+on incoming webhooks, and to sign
+.B \-\-push\-to
+requests.
+.B Harbor Glass.
+.SS compare
+.TP
+.B \-\-cohort \fINAME\fR
+Benchmark cohort.
+Built-in names are
+.BR glass\-all ,
+.BR glass\-startup ,
+and
+.BR glass\-regulated .
+The report adds a band for each metric against that cohort.
+.B Harbor Glass.
+.TP
+.B \-\-baseline \fIFILE\fR
+Compare against a previous JSON report instead of a named cohort.
+.B Harbor Glass.
+.SH DEPLOYMENTS
+The free build has one deploy signal.
+Each git tag becomes a successful
+.B deployment_status
+event, which is what
+.I queries/deployments.sql
+counts for GitHub.
+Annotated tags use the tagger date.
+A lightweight tag has no tagger date, so the deploy time is the tagged
+commit's timestamp.
+That commit's own lead time is zero and is dropped.
+Earlier commits in the release still count.
+Tags that are not on the first parent of the selected branch are skipped.
+A repository with no tags has no deployments.
+That result is expected.
+Many teams ship from a manually started workflow and never create a tag.
+A subscriber build sees those runs when you pass
+.B \-\-deploy\-from workflows
+and a
+.B \-\-workflow
+pattern.
+Releases and the GitHub Deployments API are the other subscriber sources.
+.PP
+Lead time is the median time from each included commit to the deployment
+that contains it.
+Zero minutes are ignored, matching
+.IR METRICS.md .
+.PP
+The free report also prints time to restore service and change failure
+rate, and marks both
+.B not measured in the free tool.
+A subscriber build computes them.
+Time to restore and change failure rate are
+.B Harbor Glass.
+Time to restore is the median time from incident open, or from the
+causing deployment if that is earlier, to incident close.
+Change failure rate is the share of deployments linked to at least one
+incident.
+The bands are the same names
+.I METRICS.md
+uses for lead time, and 0-15%, 16-45%, or 46-60% for change failure.
+A result of 0% means no deployment was linked to an incident.
+It does not mean the service never failed.
+.SH INCIDENTS
+Harbor Glass keeps a closed issue only when a label is named exactly
+.BR Incident .
+The body line
+.B root cause: <sha>
+links that issue to a deployment.
+The label
+.B bug
+does not count.
+This is the rule in
+.IR queries/incidents.sql .
+The free build does not read issues, so a local repository and a GitHub
+URL produce the same incident result: none.
+The locked section of the free report names this analysis.
+A subscriber build loads closed issues for a GitHub URL.
+Pull requests on that list are skipped.
+The first page holds 100 issues.
+Further pages are fetched until the history in the requested window is
+covered, which is why a larger repository needs
+.BR GITHUB_TOKEN .
+.SH ENVIRONMENT
+.TP
+.B GITHUB_TOKEN
+Token sent when
+.B assess
+or
+.B export
+is given a GitHub URL.
+Without it the API allows 60 requests per hour.
+One free assessment uses one request.
+A subscriber build pages until the history is exhausted and will spend
+more of the quota.
+With a token the limit is 5000 requests per hour.
+A
+.I .env
+file in the working directory, or in a parent up through the git root,
+may set
+.BR GITHUB_TOKEN .
+That is the recommended setup for a larger repository.
+A value already in the environment overrides the file.
+.TP
+.B HARBOR_WEBHOOK
+Default URL for
+.BR \-\-push\-to .
+.TP
+.B HARBOR_WEBHOOK_SECRET
+HMAC secret for
+.B \-\-push\-to
+when
+.B \-\-secret
+is omitted.
+.TP
+.B HARBORLENS_CONFIG
+Overrides the default config file path.
+.SH FILES
+.TP
+.I ~/.config/harborlens/config.toml
+Default configuration.
+.TP
+.I .env
+Optional file of environment variables, including
+.BR GITHUB_TOKEN .
+Git ignores it.
+.TP
+.I .harborlens/
+Cache of bare clones and API responses for the current directory.
+.TP
+.I harborlens/man/harborlens.1
+This page, before it is installed onto the system man path.
+.SH EXIT STATUS
+.TP
+.B 0
+The report was written.
+.TP
+.B 1
+The target was not a repository, git failed, or a Harbor Glass option
+was passed to the free build.
+.TP
+.B 2
+The GitHub API refused the request and
+.B \-\-offline
+was not set.
+Cached history is still reported when it exists.
+.SH EXAMPLES
+Score a GitHub repository and keep the events:
+.PP
+.nf
+.RS
+export GITHUB_TOKEN=ghp_example
+harborlens assess https://github.com/owner/repo
+harborlens assess https://github.com/owner/repo \\
+    --since 2025-01-01 --format json --output events.jsonl
+.RE
+.fi
+.PP
+Score a local checkout, including a bare clone:
+.PP
+.nf
+.RS
+harborlens assess .
+harborlens assess /var/cache/repos/example.git --offline
+.RE
+.fi
+.PP
+A team that deploys by starting a workflow named Redeploy, and that
+also deploys a preview environment.
+These flags are
+.BR "Harbor Glass" :
+.PP
+.nf
+.RS
+harborlens assess https://github.com/owner/repo \\
+    --deploy-from workflows --workflow 'Redeploy' \\
+    --environment production
+harborlens assess https://github.com/owner/repo \\
+    --deploy-from workflows --workflow 'Redeploy Preview' \\
+    --environment preview
+.RE
+.fi
+.PP
+The same repository, using tags for production and ignoring a bot:
+.PP
+.nf
+.RS
+harborlens assess . --branch main --deploy-from tags \\
+    --since 2024-06-01 --until 2025-06-01
+.RE
+.fi
+.PP
+Incidents stored under a company-specific label.
+.B Harbor Glass:
+.PP
+.nf
+.RS
+harborlens assess https://github.com/owner/repo \\
+    --incident-label sev1 --incident-label sev2 \\
+    --root-cause 'caused by ([0-9a-f]{7,40})'
+.RE
+.fi
+.PP
+Write training records, then show the webhook body without sending it.
+.B Harbor Glass
+for the webhook:
+.PP
+.nf
+.RS
+harborlens export https://github.com/owner/repo --output train.jsonl
+harborlens export . --push-to https://events.example.com/hook --dry-run
+.RE
+.fi
+.PP
+Receive webhooks on a laptop, then compare the default branch with the
+startup cohort.
+Both commands are
+.BR "Harbor Glass" :
+.PP
+.nf
+.RS
+harborlens watch --bind 127.0.0.1:8088 --secret ./hook.secret
+harborlens compare https://github.com/owner/repo --cohort glass-startup
+harborlens compare . --baseline ./last-quarter.json
+.RE
+.fi
+.SH NOTES
+The free report prints all four DORA metrics.
+Deployment frequency and lead time are computed.
+Time to restore service and change failure rate are marked
+not measured in the free tool.
+The locked section names the Harbor Glass analyses that are not computed:
+incidents, time to restore, change failure rate, reviewer load,
+benchmarks, and a written improvement plan.
+An incident is a closed issue labeled
+.B Incident
+whose body contains
+.B root cause: <sha>.
+The header says whether
+.B GITHUB_TOKEN
+was found, and never prints the token.
+Running the subscriber flags against the free build is how a prospect
+sees the boundary.
+.PP
+Install this page on Mac or Linux with the steps in
+.IR HARBORLENS.md .
+Windows has no
+.B man
+command.
+There,
+.B harborlens \-\-help
+is the short reference, and the Windows Subsystem for Linux follows
+the Linux install.
+.SH SEE ALSO
+.IR queries/changes.sql ,
+.IR queries/deployments.sql ,
+.IR queries/incidents.sql ,
+.IR METRICS.md ,
+.I HARBORLENS.md
+.PP
+https://spiralharbor.com/glass
